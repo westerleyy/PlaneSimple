@@ -1,0 +1,43 @@
+---
+title: "Plane Simple"
+output: html_notebook
+---
+This is the first notebook in this project. 
+
+This notebook details how I looked at my interest in aviation data. 
+
+Flight operation data were obtained from United States Department of Transportation. 
+
+```{r Libraries, User Inputs and Other Miscellany, include=FALSE}
+# Libraries
+library(tidyverse)
+library(plotly)
+library(DT)
+library(caret)
+library(ranger)
+library(kableExtra)
+library(gridExtra)
+library(ggthemes)
+library(lubridate)
+library(zoo)
+library(viridis)
+
+#Removing scientific notation
+options(scipen=999)
+options(digits = 12)
+
+#User Inputs
+raw_data_path <- "./RawData/"
+DOT_flight_data_prefix <- "862040899_T_ONTIME_REPORTING_"
+YYMM_suffix <- seq(1901, 1906, by = 1)
+CSV_suffix <- ".csv"
+DOT_flight_data_files <- paste(DOT_flight_data_prefix, YYMM_suffix, CSV_suffix, sep = "")
+
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
