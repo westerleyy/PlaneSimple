@@ -1,0 +1,112 @@
+---
+title: "Plane Simple"
+output: html_notebook
+---
+This is the first notebook in this project. 
+
+This notebook details how I looked at my interest in aviation data. 
+
+Flight operation data were obtained from United States Department of Transportation. 
+
+```{r Libraries, User Inputs and Other Miscellany, include=FALSE, message=FALSE, warning=FALSE}
+# Libraries
+library(tidyverse)
+library(plotly)
+library(DT)
+library(caret)
+library(ranger)
+library(gridExtra)
+library(ggthemes)
+library(lubridate)
+library(zoo)
+library(viridis)
+
+#Removing scientific notation
+options(scipen=999)
+options(digits = 12)
+
+#User Inputs
+raw_data_path <- "./RawData/LAX/"
+DOT_flight_data_prefix <- "862097489_T_ONTIME_REPORTING_"
+YYMM_suffix <- seq(1901, 1906, by = 1)
+CSV_suffix <- ".csv"
+DOT_flight_data_files <- paste(DOT_flight_data_prefix, YYMM_suffix, CSV_suffix, sep = "")
+LAX_airport <- c(12892)
+city_market_ID <- "./RawData/L_CITY_MARKET_ID.csv"
+
+#Importing files
+## Super inefficient I know but I could not think of a better way to do it since loopin with rbind() did not work
+raw_flight_data_1901 <- read_csv(paste(raw_data_path, DOT_flight_data_files[1], sep = ""))
+raw_flight_data_1902 <- read_csv(paste(raw_data_path, DOT_flight_data_files[2], sep = ""))
+raw_flight_data_1903 <- read_csv(paste(raw_data_path, DOT_flight_data_files[3], sep = ""))
+raw_flight_data_1904 <- read_csv(paste(raw_data_path, DOT_flight_data_files[4], sep = ""))
+raw_flight_data_1905 <- read_csv(paste(raw_data_path, DOT_flight_data_files[5], sep = ""))
+raw_flight_data_1906 <- read_csv(paste(raw_data_path, DOT_flight_data_files[6], sep = ""))
+raw_flight_data <- rbind(raw_flight_data_1901, raw_flight_data_1902, raw_flight_data_1903, raw_flight_data_1904, raw_flight_data_1905, raw_flight_data_1906)
+city_market <- read_csv(city_market_ID)
+```
+
+Now that the data is imported, I want to state the scope, data limitations, and objectives: 
+
+1. I was only interested in the three main airports serving New York City: La Guardia, Newark, and John F Kennedy. However, there was a lack of complete datasets originating from Newark Liberty Airport. Instead, I shifted my area of investigation to Los Angeles Intl Airport. 
+2. The dataset is limited to domestic flights originating and terminating within the United States
+3. I am only interested in departure data; that is, flights leaving from the three aforementioned airports 
+4. If there are any underserved states/destinations 
+5. Any trends or observations from the data
+6. Whether I am able to create a supervised learning model that can predict flight delays
+
+```{r Outgoing}
+# Filters for flights departing
+LAX_outbound_flight_data <- raw_flight_data %>%
+  filter(., ORIGIN_AIRPORT_ID %in% LAX_airport)
+```
+
+The following table summarises some of the most frequently flown routes originating from LAX in the first six months of 2019. 
+
+```{r Passenger Volumes and Destinations}
+flight_destinations_by_airport <- LAX_outbound_flight_data %>%
+  group_by(ORIGIN, DEST) %>%
+  summarise(number_of_flights = n(),
+            mean_distance = mean(DISTANCE)) %>%
+  arrange(desc(number_of_flights))
+datatable(flight_destinations_by_airport)
+```
+There is another way to look at it. We know that New York City is served by three airports and it is not the only major city to be served by more than one airport. If we think about it that way, 
+```{r}
+flight_destinations_by_city <- LAX_outbound_flight_data %>%
+  group_by(ORIGIN, DEST_CITY_NAME) %>%
+  summarise(number_of_flights = n(),
+            mean_distance = round(mean(DISTANCE),2)) %>%
+  arrange(desc(number_of_flights))
+datatable(flight_destinations_by_city)
+```
+Or by what the Department of Transporation defines as a destination city market. 
+```{r}
+flight_destinations_by_market <- LAX_outbound_flight_data %>%
+  group_by(ORIGIN, DEST_CITY_MARKET_ID) %>%
+  summarise(number_of_flights = n(),
+            mean_distance = round(mean(DISTANCE),2)) %>%
+  arrange(desc(number_of_flights)) %>%
+  inner_join(.,city_market, by = c("DEST_CITY_MARKET_ID" = "Code"))
+datatable(flight_destinations_by_market)
+```
+
+
+The distribution can be represented as such. 
+```{r Histogram of flights}
+frequency_histogram <- ggplot(flight_destinations_by_airport, aes(number_of_flights)) + 
+  geom_histogram(binwidth = 200)
+ggplotly(frequency_histogram)
+```
+Another question: Just because Los Angeles is on the West Coast, does it mean that it mainly serves West Coast and American Southwest destinations? 
+```{r Scatterplot of flights and distance}
+frequency_distance_scatterplot <- ggplot(flight_destinations_by_airport, aes(x = mean_distance, y = number_of_flights)) + 
+  geom_point()
+ggplotly(frequency_distance_scatterplot)
+```
+Apparently not. But what if we look at the spatial distribution of destinations connected to Los Angeles at the state level? 
+```{r Map}
+# Create map
+# Aggregate flights by state
+```
+
