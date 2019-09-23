@@ -28,11 +28,13 @@ options(digits = 12)
 #User Inputs
 raw_data_path <- "./RawData/LAX/"
 DOT_flight_data_prefix <- "862097489_T_ONTIME_REPORTING_"
+city_market_ID <- "./RawData/L_CITY_MARKET_ID.csv"
+airline_ID <- "./RawData/L_AIRLINE_ID.csv"
 YYMM_suffix <- seq(1901, 1906, by = 1)
 CSV_suffix <- ".csv"
 DOT_flight_data_files <- paste(DOT_flight_data_prefix, YYMM_suffix, CSV_suffix, sep = "")
 LAX_airport <- c(12892)
-city_market_ID <- "./RawData/L_CITY_MARKET_ID.csv"
+competitive_route_threshold <- 1
 
 #Importing files
 ## Super inefficient I know but I could not think of a better way to do it since loopin with rbind() did not work
@@ -44,6 +46,7 @@ raw_flight_data_1905 <- read_csv(paste(raw_data_path, DOT_flight_data_files[5], 
 raw_flight_data_1906 <- read_csv(paste(raw_data_path, DOT_flight_data_files[6], sep = ""))
 raw_flight_data <- rbind(raw_flight_data_1901, raw_flight_data_1902, raw_flight_data_1903, raw_flight_data_1904, raw_flight_data_1905, raw_flight_data_1906)
 city_market <- read_csv(city_market_ID)
+airline_ID <- read_csv(airline_ID)
 ```
 
 Now that the data is imported, I want to state the scope, data limitations, and objectives: 
@@ -54,6 +57,7 @@ Now that the data is imported, I want to state the scope, data limitations, and 
 4. If there are any underserved states/destinations 
 5. Any trends or observations from the data
 6. Whether I am able to create a supervised learning model that can predict flight delays
+7. Concept of a "hub captive"
 
 ```{r Outgoing}
 # Filters for flights departing
@@ -81,6 +85,8 @@ flight_destinations_by_city <- LAX_outbound_flight_data %>%
 datatable(flight_destinations_by_city)
 ```
 Or by what the Department of Transporation defines as a destination city market. 
+
+A random thought: Can destination city marketsbe representedas THiessen polygons and the distance to the nearest airport be mapped/calculated? 
 ```{r}
 flight_destinations_by_market <- LAX_outbound_flight_data %>%
   group_by(ORIGIN, DEST_CITY_MARKET_ID) %>%
@@ -90,8 +96,6 @@ flight_destinations_by_market <- LAX_outbound_flight_data %>%
   inner_join(.,city_market, by = c("DEST_CITY_MARKET_ID" = "Code"))
 datatable(flight_destinations_by_market)
 ```
-
-
 The distribution can be represented as such. 
 ```{r Histogram of flights}
 frequency_histogram <- ggplot(flight_destinations_by_airport, aes(number_of_flights)) + 
@@ -108,5 +112,51 @@ Apparently not. But what if we look at the spatial distribution of destinations 
 ```{r Map}
 # Create map
 # Aggregate flights by state
+```
+We are often told that competition increases choice and benefits the consumer. But what do these benefits really look like? Lower fare prices? Better flight timings? Improved punctuality? Better service on board? 
+
+On fare prices. It is probably safe that almost everyone on any given flight paid a different price for their ticket, barring any promotional offers. Airlines will not dovulge that information anyway. So it is impossible for us to look at the financial dimension without working relying extensively on pre-processed and aggregated statistics supplied b the Department of Transportation.
+
+Depending on how observant you are, flight timings can either be a curious phenomenon or something that makes instinctive sense, like of course it will be scheduled like this. But instead of looking at how spaced out throughout the day the flights are, we can look at how close they are to their competitors'. 
+
+Second, we can also look at how punctual flights are. It is okay for them to arrive early, but not late. 
+
+```{r delayed flights}
+late_flights <- LAX_outbound_flight_data %>%
+  filter(ARR_DEL15 > 0) %>%
+  group_by(OP_CARRIER_AIRLINE_ID) %>%
+  summarise(number_delayed_flights = n())
+ontime_early_flights <- LAX_outbound_flight_data %>%
+  filter(ARR_DEL15 == 0) %>%
+  group_by(OP_CARRIER_AIRLINE_ID) %>%
+  summarise(number_ontime_early_flights = n())
+LAX_airlines_punctuality_summary <- inner_join(ontime_early_flights, late_flights, by = ("OP_CARRIER_AIRLINE_ID")) %>%
+  mutate(pct_late = round(number_delayed_flights/(number_delayed_flights + number_ontime_early_flights)*100,1),
+         pct_ontime_early = round(number_ontime_early_flights/(number_delayed_flights + number_ontime_early_flights)*100,1)) %>%
+  arrange(desc(pct_late)) %>%
+  inner_join(., airline_ID, by = c("OP_CARRIER_AIRLINE_ID" = "Code"))
+datatable(LAX_airlines_punctuality_summary)
+```
+Surprised by the results? Further, we need to take into account that the Department of Transporation classifies a delayed flight as one that arrived more than 15 minutes after its scheduled arrival time.  
+
+To look at these two things, we will pick out `Destination City Markets` that are served by more than one airline from LAX, which ought to result in competitive behavior. 
+```{r}
+LAX_outbound_flight_data <- LAX_outbound_flight_data %>%
+  group_by(DEST_CITY_MARKET_ID) %>%
+  mutate(number_airlines_serving_route = n_distinct(OP_CARRIER_AIRLINE_ID)) %>%
+  ungroup()
+```
+
+```{r}
+competitive_flights <- LAX_outbound_flight_data %>%
+  filter(number_airlines_serving_route > competitive_route_threshold)
+#Departure delays do not matter as long as the flights can still get there on time given the amount of padding 
+#People make decisions and plans around the scheduled arrival time, so if it is late on getting out but on time getting in, it is fine
+competitive_flights_delayed <- competitive_flights %>%
+  filter(ARR_DELAY > 0)
+#How often flights are delayed among similarly competitive routes 
+delay_by_competitiveness <- competitive_flights_delayed %>%
+  group_by(number_airlines_serving_route, OP_CARRIER_AIRLINE_ID) %>%
+  summarise(mean_delay = round(mean(ARR_DELAY),2))
 ```
 
