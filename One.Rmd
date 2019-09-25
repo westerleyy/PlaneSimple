@@ -1,6 +1,8 @@
 ---
 title: "Plane Simple"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
 This is the first notebook in this project. 
 
@@ -20,6 +22,7 @@ library(ggthemes)
 library(lubridate)
 library(zoo)
 library(viridis)
+library(broom)
 
 #Removing scientific notation
 options(scipen=999)
@@ -86,7 +89,7 @@ datatable(flight_destinations_by_city)
 ```
 Or by what the Department of Transporation defines as a destination city market. 
 
-A random thought: Can destination city marketsbe representedas THiessen polygons and the distance to the nearest airport be mapped/calculated? 
+A random thought: Can destination city marketsbe represented as Thiessen polygons and the distance to the nearest airport be mapped/calculated? 
 ```{r}
 flight_destinations_by_market <- LAX_outbound_flight_data %>%
   group_by(ORIGIN, DEST_CITY_MARKET_ID) %>%
@@ -147,16 +150,33 @@ LAX_outbound_flight_data <- LAX_outbound_flight_data %>%
   ungroup()
 ```
 
-```{r}
-competitive_flights <- LAX_outbound_flight_data %>%
-  filter(number_airlines_serving_route > competitive_route_threshold)
+```{r competitiveness}
+##competitive_flights <- LAX_outbound_flight_data %>%
+##  filter(number_airlines_serving_route > competitive_route_threshold)
 #Departure delays do not matter as long as the flights can still get there on time given the amount of padding 
 #People make decisions and plans around the scheduled arrival time, so if it is late on getting out but on time getting in, it is fine
-competitive_flights_delayed <- competitive_flights %>%
-  filter(ARR_DELAY > 0)
+##competitive_flights_delayed <- competitive_flights %>%
+##  filter(ARR_DELAY > 0)
 #How often flights are delayed among similarly competitive routes 
-delay_by_competitiveness <- competitive_flights_delayed %>%
+delay_by_competitiveness <- LAX_outbound_flight_data %>%
+  filter(ARR_DELAY > 0) %>%
   group_by(number_airlines_serving_route, OP_CARRIER_AIRLINE_ID) %>%
-  summarise(mean_delay = round(mean(ARR_DELAY),2))
+  summarise(mean_delay = round(mean(ARR_DELAY),2)) %>%
+  inner_join(., airline_ID, by = c("OP_CARRIER_AIRLINE_ID" = "Code")) %>%
+  arrange(number_airlines_serving_route, desc(mean_delay))
+delay_scatter <- ggplot(delay_by_competitiveness, aes(x = number_airlines_serving_route, y = mean_delay)) + 
+  geom_point(aes(color = Description))
+ggplotly(delay_scatter)
+```
+
+```{r competitiveness regression}
+competitiveness_delay_regression <- lm(mean_delay ~ number_airlines_serving_route + Description, data = delay_by_competitiveness)
+model_fitted <- augment(competitiveness_delay_regression)
+summary(model_fitted)
+model_plot <- ggplot(delay_by_competitiveness, aes(number_airlines_serving_route, mean_delay, color = Description)) + 
+  geom_point() + 
+  geom_smooth(method= "lm", se = F) + 
+  scale_fill_viridis_d()
+ggplotly(model_plot)
 ```
 
