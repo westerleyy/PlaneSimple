@@ -23,6 +23,12 @@ library(lubridate)
 library(zoo)
 library(viridis)
 library(broom)
+library(tmap)
+library(tmaptools)
+library(sp)
+library(rgdal)
+library(rspatial)
+library(sf)
 
 #Removing scientific notation
 options(scipen=999)
@@ -33,6 +39,7 @@ raw_data_path <- "./RawData/LAX/"
 DOT_flight_data_prefix <- "862097489_T_ONTIME_REPORTING_"
 city_market_ID <- "./RawData/L_CITY_MARKET_ID.csv"
 airline_ID <- "./RawData/L_AIRLINE_ID.csv"
+US_state_map <- "./RawData/tl_2017_us_state/tl_2017_us_state.shp"
 YYMM_suffix <- seq(1901, 1906, by = 1)
 CSV_suffix <- ".csv"
 DOT_flight_data_files <- paste(DOT_flight_data_prefix, YYMM_suffix, CSV_suffix, sep = "")
@@ -40,7 +47,7 @@ LAX_airport <- c(12892)
 competitive_route_threshold <- 1
 
 #Importing files
-## Super inefficient I know but I could not think of a better way to do it since loopin with rbind() did not work
+## Super inefficient I know but I could not think of a better way to do it since looping with rbind() did not work
 raw_flight_data_1901 <- read_csv(paste(raw_data_path, DOT_flight_data_files[1], sep = ""))
 raw_flight_data_1902 <- read_csv(paste(raw_data_path, DOT_flight_data_files[2], sep = ""))
 raw_flight_data_1903 <- read_csv(paste(raw_data_path, DOT_flight_data_files[3], sep = ""))
@@ -50,6 +57,7 @@ raw_flight_data_1906 <- read_csv(paste(raw_data_path, DOT_flight_data_files[6], 
 raw_flight_data <- rbind(raw_flight_data_1901, raw_flight_data_1902, raw_flight_data_1903, raw_flight_data_1904, raw_flight_data_1905, raw_flight_data_1906)
 city_market <- read_csv(city_market_ID)
 airline_ID <- read_csv(airline_ID)
+US_state_map <- read_shape(US_state_map, stringsAsFactors = F)
 ```
 
 Now that the data is imported, I want to state the scope, data limitations, and objectives: 
@@ -115,6 +123,27 @@ Apparently not. But what if we look at the spatial distribution of destinations 
 ```{r Map}
 # Create map
 # Aggregate flights by state
+lax_destinations_state <- LAX_outbound_flight_data %>%
+  group_by(DEST_STATE_ABR, MONTH) %>%
+  summarise(monthly_sum_flights = n()) %>%
+  group_by(DEST_STATE_ABR) %>%
+  summarise(mean_monthly_flights = round(mean(monthly_sum_flights)))
+
+# Super important: Even though imported shp behave like dfs, merging with a df using anything but merge() from sp returns a df NOT shp
+lax_destinations_state_shp <- merge(US_state_map, lax_destinations_state, by.y = "DEST_STATE_ABR", by.x = "STUSPS", all.x = T)
+lax_destination_state_map_layer <- tm_shape(lax_destinations_state_shp) + 
+  tm_polygons(col = "mean_monthly_flights", border.col = NA, palette = "viridis") + 
+  tm_text("STUSPS")
+lax_destinations_state_leaflet <- tmap_leaflet(x = lax_destination_state_map_layer)
+lax_destinations_state_leaflet
+
+lax_destinations_state_airline <- LAX_outbound_flight_data %>%
+  group_by(DEST_STATE_ABR, OP_CARRIER_AIRLINE_ID, MONTH) %>%
+  summarise(monthly_sum_flights = n()) %>%
+  group_by(DEST_STATE_ABR, OP_CARRIER_AIRLINE_ID) %>%
+  summarise(mean_monthly_flights = round(mean(monthly_sum_flights))) %>%
+  inner_join(., airline_ID, by = c("OP_CARRIER_AIRLINE_ID" = "Code"))
+
 ```
 We are often told that competition increases choice and benefits the consumer. But what do these benefits really look like? Lower fare prices? Better flight timings? Improved punctuality? Better service on board? 
 
@@ -171,12 +200,11 @@ ggplotly(delay_scatter)
 
 ```{r competitiveness regression}
 competitiveness_delay_regression <- lm(mean_delay ~ number_airlines_serving_route + Description, data = delay_by_competitiveness)
-model_fitted <- augment(competitiveness_delay_regression)
+model_fitted <- augment(competitiveness_delay_regression, type.predict = "response")
 summary(model_fitted)
 model_plot <- ggplot(delay_by_competitiveness, aes(number_airlines_serving_route, mean_delay, color = Description)) + 
   geom_point() + 
-  geom_smooth(method= "lm", se = F) + 
-  scale_fill_viridis_d()
+  geom_line(data = model_fitted, aes(y = .fitted))
 ggplotly(model_plot)
 ```
 
