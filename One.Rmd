@@ -40,6 +40,7 @@ DOT_flight_data_prefix <- "862097489_T_ONTIME_REPORTING_"
 city_market_ID <- "./RawData/L_CITY_MARKET_ID.csv"
 airline_ID <- "./RawData/L_AIRLINE_ID.csv"
 US_state_map <- "./RawData/tl_2017_us_state/tl_2017_us_state.shp"
+test_data <- "./RawData/LAX/479991776_T_ONTIME_REPORTING_1907.csv"
 YYMM_suffix <- seq(1901, 1906, by = 1)
 CSV_suffix <- ".csv"
 DOT_flight_data_files <- paste(DOT_flight_data_prefix, YYMM_suffix, CSV_suffix, sep = "")
@@ -55,6 +56,7 @@ raw_flight_data_1904 <- read_csv(paste(raw_data_path, DOT_flight_data_files[4], 
 raw_flight_data_1905 <- read_csv(paste(raw_data_path, DOT_flight_data_files[5], sep = ""))
 raw_flight_data_1906 <- read_csv(paste(raw_data_path, DOT_flight_data_files[6], sep = ""))
 raw_flight_data <- rbind(raw_flight_data_1901, raw_flight_data_1902, raw_flight_data_1903, raw_flight_data_1904, raw_flight_data_1905, raw_flight_data_1906)
+test_data <- read_csv(test_data)
 city_market <- read_csv(city_market_ID)
 airline_ID <- read_csv(airline_ID)
 US_state_map <- read_shape(US_state_map, stringsAsFactors = F)
@@ -97,7 +99,7 @@ datatable(flight_destinations_by_city)
 ```
 Or by what the Department of Transporation defines as a destination city market. 
 
-A random thought: Can destination city marketsbe represented as Thiessen polygons and the distance to the nearest airport be mapped/calculated? 
+A random thought: Can destination city markets be represented as Thiessen polygons and the distance to the nearest airport be mapped/calculated? 
 ```{r}
 flight_destinations_by_market <- LAX_outbound_flight_data %>%
   group_by(ORIGIN, DEST_CITY_MARKET_ID) %>%
@@ -109,17 +111,19 @@ datatable(flight_destinations_by_market)
 ```
 The distribution can be represented as such. 
 ```{r Histogram of flights}
-frequency_histogram <- ggplot(flight_destinations_by_airport, aes(number_of_flights)) + 
+frequency_histogram <- ggplot(flight_destinations_by_market, aes(number_of_flights)) + 
   geom_histogram(binwidth = 200)
 ggplotly(frequency_histogram)
 ```
 Another question: Just because Los Angeles is on the West Coast, does it mean that it mainly serves West Coast and American Southwest destinations? 
 ```{r Scatterplot of flights and distance}
-frequency_distance_scatterplot <- ggplot(flight_destinations_by_airport, aes(x = mean_distance, y = number_of_flights)) + 
+frequency_distance_scatterplot <- ggplot(flight_destinations_by_market, aes(x = mean_distance, y = number_of_flights)) + 
   geom_point()
 ggplotly(frequency_distance_scatterplot)
 ```
 Apparently not. But what if we look at the spatial distribution of destinations connected to Los Angeles at the state level? 
+
+It appears that states adjacent to California tend to receive more flights than those farther away. However there are some exceptions such as IL, GA, FL, NY, and HI. With the exception of HI, IL, NY, GA, and FL are home to the hubs of the three main US carriers. HI's high degree of connectivity with LAX is due to its geographical isolation from any other state bar California. Hence, the four main US carriers (Alaska, American, United, and Delta) and Hawaiian use LAX as a gateway to Hawaii due to the high numbers of feeder flights from across the United States into each of the carriers' hub terminals at LAX. 
 ```{r Map}
 # Create map
 # Aggregate flights by state
@@ -137,17 +141,16 @@ lax_destination_state_map_layer <- tm_shape(lax_destinations_state_shp) +
 lax_destinations_state_leaflet <- tmap_leaflet(x = lax_destination_state_map_layer)
 lax_destinations_state_leaflet
 
-lax_destinations_state_airline <- LAX_outbound_flight_data %>%
-  group_by(DEST_STATE_ABR, OP_CARRIER_AIRLINE_ID, MONTH) %>%
-  summarise(monthly_sum_flights = n()) %>%
-  group_by(DEST_STATE_ABR, OP_CARRIER_AIRLINE_ID) %>%
-  summarise(mean_monthly_flights = round(mean(monthly_sum_flights))) %>%
-  inner_join(., airline_ID, by = c("OP_CARRIER_AIRLINE_ID" = "Code"))
-
+#lax_destinations_state_airline <- LAX_outbound_flight_data %>%
+#  group_by(DEST_STATE_ABR, OP_CARRIER_AIRLINE_ID, MONTH) %>%
+#  summarise(monthly_sum_flights = n()) %>%
+#  group_by(DEST_STATE_ABR, OP_CARRIER_AIRLINE_ID) %>%
+#  summarise(mean_monthly_flights = round(mean(monthly_sum_flights))) %>%
+#  inner_join(., airline_ID, by = c("OP_CARRIER_AIRLINE_ID" = "Code"))
 ```
 We are often told that competition increases choice and benefits the consumer. But what do these benefits really look like? Lower fare prices? Better flight timings? Improved punctuality? Better service on board? 
 
-On fare prices. It is probably safe that almost everyone on any given flight paid a different price for their ticket, barring any promotional offers. Airlines will not dovulge that information anyway. So it is impossible for us to look at the financial dimension without working relying extensively on pre-processed and aggregated statistics supplied b the Department of Transportation.
+On fare prices. It is probably safe to say that almost everyone on any given flight paid a different price for their ticket, barring any promotional offers. Airlines will not divulge that information anyway. So it is impossible for us to look at the financial dimension without working relying extensively on pre-processed and aggregated statistics supplied by the Department of Transportation.
 
 Depending on how observant you are, flight timings can either be a curious phenomenon or something that makes instinctive sense, like of course it will be scheduled like this. But instead of looking at how spaced out throughout the day the flights are, we can look at how close they are to their competitors'. 
 
@@ -172,39 +175,50 @@ datatable(LAX_airlines_punctuality_summary)
 Surprised by the results? Further, we need to take into account that the Department of Transporation classifies a delayed flight as one that arrived more than 15 minutes after its scheduled arrival time.  
 
 To look at these two things, we will pick out `Destination City Markets` that are served by more than one airline from LAX, which ought to result in competitive behavior. 
-```{r}
-LAX_outbound_flight_data <- LAX_outbound_flight_data %>%
-  group_by(DEST_CITY_MARKET_ID) %>%
-  mutate(number_airlines_serving_route = n_distinct(OP_CARRIER_AIRLINE_ID)) %>%
-  ungroup()
-```
 
 ```{r competitiveness}
-##competitive_flights <- LAX_outbound_flight_data %>%
-##  filter(number_airlines_serving_route > competitive_route_threshold)
 #Departure delays do not matter as long as the flights can still get there on time given the amount of padding 
 #People make decisions and plans around the scheduled arrival time, so if it is late on getting out but on time getting in, it is fine
-##competitive_flights_delayed <- competitive_flights %>%
-##  filter(ARR_DELAY > 0)
-#How often flights are delayed among similarly competitive routes 
+#How often flights are delayed among similarly competitive routes
+
+## First count the number of airlines operating to each airport and not city market beause each airport is run differently
+## For each airline serving that airport, what is the proportion of flights that arrive there late, regardless of departure from LAX 
+## Grouping by airline and the number of competitors, find out how late on average an airline is
+
+LAX_outbound_flight_data <- LAX_outbound_flight_data %>%
+  group_by(DEST_AIRPORT_ID) %>%
+  mutate(number_airlines_serving_route = n_distinct(OP_CARRIER_AIRLINE_ID)) %>%
+  ungroup()
 delay_by_competitiveness <- LAX_outbound_flight_data %>%
+  group_by(DEST_AIRPORT_ID, OP_CARRIER_AIRLINE_ID) %>%
+  mutate(number_flights = round(n())) %>%
+  ungroup() %>%
   filter(ARR_DELAY > 0) %>%
-  group_by(number_airlines_serving_route, OP_CARRIER_AIRLINE_ID) %>%
-  summarise(mean_delay = round(mean(ARR_DELAY),2)) %>%
+  group_by(DEST_AIRPORT_ID, OP_CARRIER_AIRLINE_ID, number_airlines_serving_route) %>%
+  summarise(mean_delay = round(mean(ARR_DELAY), 2),
+            mean_number_delayed_flights = round(mean(n())),
+            mean_prop_delayed_flights = round(mean_number_delayed_flights/mean(number_flights)*100, 2)) %>%
+  group_by(OP_CARRIER_AIRLINE_ID, number_airlines_serving_route) %>%
+  summarise(mean_delay_time = round(mean(mean_delay), 2),
+            mean_prop_delayed_flights = round(mean(mean_prop_delayed_flights), 2)) %>%
   inner_join(., airline_ID, by = c("OP_CARRIER_AIRLINE_ID" = "Code")) %>%
-  arrange(number_airlines_serving_route, desc(mean_delay))
-delay_scatter <- ggplot(delay_by_competitiveness, aes(x = number_airlines_serving_route, y = mean_delay)) + 
+  arrange(OP_CARRIER_AIRLINE_ID, desc(mean_delay_time))
+delay_scatter <- ggplot(delay_by_competitiveness, aes(x = number_airlines_serving_route, y = mean_delay_time)) + 
   geom_point(aes(color = Description))
 ggplotly(delay_scatter)
 ```
 
 ```{r competitiveness regression}
-competitiveness_delay_regression <- lm(mean_delay ~ number_airlines_serving_route + Description, data = delay_by_competitiveness)
+competitiveness_delay_regression <- lm(mean_delay_time ~ number_airlines_serving_route + Description + mean_prop_delayed_flights, data = delay_by_competitiveness)
 model_fitted <- augment(competitiveness_delay_regression, type.predict = "response")
 summary(model_fitted)
-model_plot <- ggplot(delay_by_competitiveness, aes(number_airlines_serving_route, mean_delay, color = Description)) + 
+model_plot <- ggplot(delay_by_competitiveness, aes(number_airlines_serving_route, mean_delay_time, color = Description)) + 
   geom_point() + 
   geom_line(data = model_fitted, aes(y = .fitted))
 ggplotly(model_plot)
+```
+Creating a random forest model
+```{r}
+
 ```
 
