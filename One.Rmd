@@ -56,6 +56,7 @@ raw_flight_data_1904 <- read_csv(paste(raw_data_path, DOT_flight_data_files[4], 
 raw_flight_data_1905 <- read_csv(paste(raw_data_path, DOT_flight_data_files[5], sep = ""))
 raw_flight_data_1906 <- read_csv(paste(raw_data_path, DOT_flight_data_files[6], sep = ""))
 raw_flight_data <- rbind(raw_flight_data_1901, raw_flight_data_1902, raw_flight_data_1903, raw_flight_data_1904, raw_flight_data_1905, raw_flight_data_1906)
+raw_flight_data <- raw_flight_data[, 1:51]
 test_data <- read_csv(test_data)
 city_market <- read_csv(city_market_ID)
 airline_ID <- read_csv(airline_ID)
@@ -218,7 +219,40 @@ model_plot <- ggplot(delay_by_competitiveness, aes(number_airlines_serving_route
 ggplotly(model_plot)
 ```
 Creating a random forest model
-```{r}
+```{r test and validation data}
+# features with just one level have to be eliminated
+LAX_outbound_flight_data_random_forest <- LAX_outbound_flight_data[, c(2:4, 7,9, 18, 20, 26:28, 35:39, 52)] %>%
+  na.omit()
+LAX_outbound_flight_data_random_forest$CRS_DEP_TIME <- as.numeric(LAX_outbound_flight_data_random_forest$CRS_DEP_TIME)
+LAX_outbound_flight_data_random_forest$DEP_TIME <- as.numeric(LAX_outbound_flight_data_random_forest$DEP_TIME)
+LAX_outbound_flight_data_random_forest$CRS_ARR_TIME <- as.numeric(LAX_outbound_flight_data_random_forest$CRS_ARR_TIME)
+LAX_outbound_flight_data_random_forest$ARR_TIME <- as.numeric(LAX_outbound_flight_data_random_forest$ARR_TIME)
+```
 
+```{r feature selection}
+# not Learning Vector Quantization, "error: wrong model type for regression"
+# find highly correlated features first
+correlation_matrix <- cor(LAX_outbound_flight_data_random_forest[, c(1:12, 14:16)])
+correlation_matrix
+high_corr <- findCorrelation(correlation_matrix, cutoff = 0.75)
+print(high_corr)
+```
+```{r}
+# refined dataset after removing for highly correlated variables and other non-numeric
+LAX_outbound_flight_data_random_forest <- LAX_outbound_flight_data_random_forest[, c(1:8, 10, 12, 13, 14:16)]
+LAX_outbound_flight_data_random_forest_test <- sample_n(LAX_outbound_flight_data_random_forest, round(0.8*(nrow(LAX_outbound_flight_data_random_forest))))
+LAX_outbound_flight_data_random_forest_validation <- anti_join(LAX_outbound_flight_data_random_forest, LAX_outbound_flight_data_random_forest_test)
+control <- trainControl(method = "cv",
+                        number = 10,
+                        verboseIter = T)
+```
+
+
+```{r running model}
+rf_LAX <- train(ARR_DELAY ~., 
+                data = LAX_outbound_flight_data_random_forest_test,
+                method = "ranger",
+                trControl = control)
+print(rf_LAX)
 ```
 
