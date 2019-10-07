@@ -47,6 +47,9 @@ DOT_flight_data_files <- paste(DOT_flight_data_prefix, YYMM_suffix, CSV_suffix, 
 LAX_airport <- c(12892)
 competitive_route_threshold <- 1
 
+#setting seed
+set.seed(106)
+
 #Importing files
 ## Super inefficient I know but I could not think of a better way to do it since looping with rbind() did not work
 raw_flight_data_1901 <- read_csv(paste(raw_data_path, DOT_flight_data_files[1], sep = ""))
@@ -256,6 +259,7 @@ rf_LAX <- train(ARR_DELAY ~.,
 print(rf_LAX)
 ```
 
+The following predicts duration of flight delay for flights departing from LAX. 
 ```{r}
 rf_LAX_predict <- predict(rf_LAX, LAX_outbound_flight_data_random_forest_validation)
 rf_LAX_predict_df <- as.data.frame(rf_LAX_predict) %>%
@@ -264,8 +268,26 @@ rf_accuracy_plot <- ggplot(rf_LAX_predict_df) +
   geom_point(aes(x = rf_LAX_predict_df$`LAX_outbound_flight_data_random_forest_validation$ARR_DELAY`, y = rf_LAX_predict_df$rf_LAX_predict)) +
   geom_abline(aes(intercept = 0, slope = 1)) 
 rf_accuracy_plot
+```
+The following converts arrival delay group into factors, enabling categorical predictions and the plotting of a confusion matrix. 
+```{r random forrest arrival delay group}
+LAX_outbound_flight_data_random_forest_test_2 <- LAX_outbound_flight_data_random_forest_test %>%
+  mutate(ARR_DELAY_GROUP = as.factor(ARR_DELAY_GROUP))
+LAX_outbound_flight_data_random_forest_validation_2 <- LAX_outbound_flight_data_random_forest_validation %>%
+  mutate(ARR_DELAY_GROUP = as.factor(ARR_DELAY_GROUP))
+```
 
-
-#confusion matrix?
+Creating random forest model
+```{r}
+rf_LAX_categorical <- train(ARR_DELAY_GROUP ~., 
+                data = LAX_outbound_flight_data_random_forest_test_2,
+                method = "ranger",
+                trControl = control)
+print(rf_LAX_categorical)
+```
+```{r Prediction}
+rf_LAX_predict_categorical <- predict(rf_LAX_categorical, LAX_outbound_flight_data_random_forest_validation_2)
+rf_LAX_confusion_matrix <- confusionMatrix(rf_LAX_predict_categorical, LAX_outbound_flight_data_random_forest_validation_2$ARR_DELAY_GROUP)
+rf_LAX_confusion_matrix$table
 ```
 
