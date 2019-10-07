@@ -259,15 +259,17 @@ rf_LAX <- train(ARR_DELAY ~.,
 print(rf_LAX)
 ```
 
-The following predicts duration of flight delay for flights departing from LAX. 
+The following predicts duration of flight delay for flights departing from LAX. The RMSE is about 4.8 minutes and the R-Squared value is 0.9839 which is really good!
 ```{r}
 rf_LAX_predict <- predict(rf_LAX, LAX_outbound_flight_data_random_forest_validation)
 rf_LAX_predict_df <- as.data.frame(rf_LAX_predict) %>%
   cbind(LAX_outbound_flight_data_random_forest_validation$ARR_DELAY)
 rf_accuracy_plot <- ggplot(rf_LAX_predict_df) + 
   geom_point(aes(x = rf_LAX_predict_df$`LAX_outbound_flight_data_random_forest_validation$ARR_DELAY`, y = rf_LAX_predict_df$rf_LAX_predict)) +
-  geom_abline(aes(intercept = 0, slope = 1)) 
+  geom_abline(aes(intercept = 0, slope = 1)) +
+  geom_smooth(method = "lm", aes(x = rf_LAX_predict_df$`LAX_outbound_flight_data_random_forest_validation$ARR_DELAY`, y = rf_LAX_predict_df$rf_LAX_predict))
 rf_accuracy_plot
+postResample(pred = rf_LAX_predict, obs = rf_LAX_predict_df$`LAX_outbound_flight_data_random_forest_validation$ARR_DELAY`)
 ```
 The following converts arrival delay group into factors, enabling categorical predictions and the plotting of a confusion matrix. 
 ```{r random forrest arrival delay group}
