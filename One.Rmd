@@ -293,3 +293,20 @@ rf_LAX_confusion_matrix <- confusionMatrix(rf_LAX_predict_categorical, LAX_outbo
 rf_LAX_confusion_matrix$table
 ```
 
+```{r model 3}
+LAX_outbound_flight_data_random_forest_test_3 <- LAX_outbound_flight_data_random_forest_test_2[, c(1:8, 13:14)]
+LAX_outbound_flight_data_random_forest_validation_3 <- LAX_outbound_flight_data_random_forest_validation_2[, c(1:8, 13:14)]
+control2 <- trainControl(method = "repeatedcv",
+                        number = 10,
+                        repeats = 3,
+                        verboseIter = T)
+rf_LAX_categorical_2 <- train(ARR_DELAY_GROUP ~., 
+                data = LAX_outbound_flight_data_random_forest_test_3,
+                method = "ranger",
+                trControl = control2)
+print(rf_LAX_categorical_2)
+rf_LAX_predict_categorical_2 <- predict(rf_LAX_categorical_2, LAX_outbound_flight_data_random_forest_validation_3)
+rf_LAX_confusion_matrix_2 <- confusionMatrix(rf_LAX_predict_categorical_2, LAX_outbound_flight_data_random_forest_validation_3$ARR_DELAY_GROUP)
+rf_LAX_confusion_matrix_2$table
+```
+
